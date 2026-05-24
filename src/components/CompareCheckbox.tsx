@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 
 const KEY = 'hn_compare';
-const MAX = 3;
+export const MAX = 3;
 
 export interface CompareItem {
   npi: string;
@@ -56,7 +56,22 @@ export default function CompareCheckbox({ item }: { item: CompareItem }) {
     }
   }
 
-  if (!checked && atMax) return null;
+  if (!checked && atMax) {
+    return (
+      <div
+        title="Maximum 3 providers can be compared at once"
+        className="absolute right-2 top-2 z-10 flex h-6 w-6 cursor-not-allowed items-center justify-center rounded-full border-2 border-gray-200 bg-gray-50"
+      >
+        <svg viewBox="0 0 12 12" fill="currentColor" className="h-3 w-3 text-gray-300">
+          <path
+            fillRule="evenodd"
+            d="M4.5 2.25a2.25 2.25 0 1 1 4.5 0v1.5h-4.5v-1.5Zm-1.5 1.5v-1.5a3.75 3.75 0 1 1 7.5 0v1.5H12v7.5A1.5 1.5 0 0 1 10.5 12h-9A1.5 1.5 0 0 1 0 10.5V3.75h3Zm4.5 4.5a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z"
+            clipRule="evenodd"
+          />
+        </svg>
+      </div>
+    );
+  }
 
   return (
     <button

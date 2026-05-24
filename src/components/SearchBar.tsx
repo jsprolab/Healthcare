@@ -53,7 +53,7 @@ export default function SearchBar({ className = '' }: { className?: string }) {
   const allItems = [
     ...results.providers.map((p) => ({ href: `/provider/${p.npi}` })),
     ...results.cities.map((c) => ({ href: `/ca/${c.slug}` })),
-    ...results.specialties.map(() => ({ href: `/#specialties` })),
+    ...results.specialties.map((s) => ({ href: `/search?q=${encodeURIComponent(s.name)}` })),
   ];
 
   const fetch = useCallback(async (q: string) => {
@@ -281,7 +281,7 @@ export default function SearchBar({ className = '' }: { className?: string }) {
                 return (
                   <Link
                     key={s.slug}
-                    href="/#specialties"
+                    href={`/search?q=${encodeURIComponent(s.name)}`}
                     onClick={() => {
                       setOpen(false);
                       setQuery('');
@@ -299,7 +299,7 @@ export default function SearchBar({ className = '' }: { className?: string }) {
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-gray-900">{s.name}</p>
-                      <p className="text-xs text-gray-500">Browse by city →</p>
+                      <p className="text-xs text-gray-500">See providers →</p>
                     </div>
                   </Link>
                 );
