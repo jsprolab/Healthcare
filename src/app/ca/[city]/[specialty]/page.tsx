@@ -19,6 +19,7 @@ import PerPageSelector from '@/components/PerPageSelector';
 import CompareCheckbox from '@/components/CompareCheckbox';
 import CompareBar from '@/components/CompareBar';
 import ProviderAvatar from '@/components/ProviderAvatar';
+import InsuranceSelector from '@/components/InsuranceSelector';
 
 const VALID_PAGE_SIZES = [25, 50, 100] as const;
 const DEFAULT_PAGE_SIZE = 25;
@@ -388,29 +389,7 @@ export default async function CitySpecialtyPage({ params, searchParams }: Props)
 
                   {/* Insurance filter — only shown after MRF data is imported */}
                   {availableInsurers.length > 0 && (
-                    <div className="flex items-center gap-1.5">
-                      <select
-                        value={insuranceOn ?? ''}
-                        onChange={(e) => {
-                          window.location.href = filterHref({
-                            insurance: e.target.value || undefined,
-                            page: '1',
-                          });
-                        }}
-                        className={`rounded-lg border px-3 py-1 text-xs font-medium transition-colors focus:outline-none ${
-                          insuranceOn
-                            ? 'border-purple-300 bg-purple-600 text-white'
-                            : 'border-gray-200 bg-white text-gray-600'
-                        }`}
-                      >
-                        <option value="">Insurance: Any</option>
-                        {availableInsurers.map((plan) => (
-                          <option key={plan.slug} value={plan.slug}>
-                            {plan.insurer}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    <InsuranceSelector insurers={availableInsurers} current={insuranceOn} />
                   )}
                 </div>
                 <PerPageSelector
