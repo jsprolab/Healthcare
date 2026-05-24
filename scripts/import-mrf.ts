@@ -26,17 +26,10 @@
 
 import { createReadStream } from 'node:fs';
 import { createGunzip } from 'node:zlib';
-import { Readable } from 'node:stream';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { parser } = require('stream-json') as { parser: (opts?: object) => NodeJS.ReadWriteStream };
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { pick } = require('stream-json/filters/Pick') as {
-  pick: (opts?: object) => NodeJS.ReadWriteStream;
-};
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { streamArray } = require('stream-json/streamers/StreamArray') as {
-  streamArray: () => NodeJS.ReadWriteStream;
-};
+import { Readable, type Duplex } from 'node:stream';
+import parserStream from 'stream-json';
+import pick from 'stream-json/filters/pick';
+import streamArray from 'stream-json/streamers/stream-array';
 import { prisma } from '../src/lib/prisma';
 
 // ─── CLI args ─────────────────────────────────────────────────────────────────
@@ -127,41 +120,89 @@ interface InNetworkItem {
   }>;
 }
 
-async function streamNpis(
+// CMS MRF v2.0: provider_references[].provider_groups[].npi[]
+interface ProviderReference {
+  provider_group_id?: number;
+  provider_groups?: Array<{ npi?: number[] }>;
+}
+
+function collectNpis(
+  groups: Array<{ npi?: number[] }>,
+  seen: Set<string>,
+  knownNpis: Set<string>,
+  pending: string[]
+) {
+  for (const group of groups) {
+    for (const raw of group.npi ?? []) {
+      const npi = String(raw).padStart(10, '0');
+      if (!seen.has(npi) && knownNpis.has(npi)) {
+        seen.add(npi);
+        pending.push(npi);
+      }
+    }
+  }
+}
+
+// v2.0 format: NPIs live in top-level provider_references
+async function streamNpisFromRefs(
   source: Readable,
   hint: string,
   knownNpis: Set<string>,
   onBatch: OnBatch,
   batchSize = 500
-) {
+): Promise<number> {
   const seen = new Set<string>();
   let pending: string[] = [];
   let items = 0;
 
   const stream = maybeGunzip(source, hint)
-    .pipe(parser({ streamValues: false }))
-    .pipe(pick({ filter: 'in_network' }))
-    .pipe(streamArray()) as AsyncIterable<{ value: unknown }>;
+    .pipe(parserStream({ streamValues: false }) as Duplex)
+    .pipe(pick.asStream({ filter: 'provider_references' }) as Duplex)
+    .pipe(streamArray.asStream() as Duplex) as AsyncIterable<{ value: unknown }>;
 
-  async function flush() {
-    if (pending.length === 0) return;
-    await onBatch(pending);
-    pending = [];
+  for await (const { value } of stream) {
+    items++;
+    const ref = value as ProviderReference;
+    collectNpis(ref.provider_groups ?? [], seen, knownNpis, pending);
+    if (pending.length >= batchSize) {
+      await onBatch(pending);
+      pending = [];
+    }
+    if (items % 200 === 0) {
+      process.stdout.write(`\r  ${fmt(items)} provider refs · ${fmt(seen.size)} matching NPIs`);
+    }
   }
+
+  if (pending.length > 0) await onBatch(pending);
+  process.stdout.write(`\r  ${fmt(items)} provider refs · ${fmt(seen.size)} matching NPIs\n`);
+  return seen.size;
+}
+
+// v1 format: NPIs inline in in_network[].negotiated_rates[].provider_groups[]
+async function streamNpisFromInNetwork(
+  source: Readable,
+  hint: string,
+  knownNpis: Set<string>,
+  onBatch: OnBatch,
+  batchSize = 500
+): Promise<number> {
+  const seen = new Set<string>();
+  let pending: string[] = [];
+  let items = 0;
+
+  const stream = maybeGunzip(source, hint)
+    .pipe(parserStream({ streamValues: false }) as Duplex)
+    .pipe(pick.asStream({ filter: 'in_network' }) as Duplex)
+    .pipe(streamArray.asStream() as Duplex) as AsyncIterable<{ value: unknown }>;
 
   for await (const { value } of stream) {
     items++;
     const item = value as InNetworkItem;
     for (const rate of item.negotiated_rates ?? []) {
-      for (const group of rate.provider_groups ?? []) {
-        for (const raw of group.npi ?? []) {
-          const npi = String(raw).padStart(10, '0');
-          if (!seen.has(npi) && knownNpis.has(npi)) {
-            seen.add(npi);
-            pending.push(npi);
-            if (pending.length >= batchSize) await flush();
-          }
-        }
+      collectNpis(rate.provider_groups ?? [], seen, knownNpis, pending);
+      if (pending.length >= batchSize) {
+        await onBatch(pending);
+        pending = [];
       }
     }
     if (items % 1000 === 0) {
@@ -169,7 +210,7 @@ async function streamNpis(
     }
   }
 
-  await flush();
+  if (pending.length > 0) await onBatch(pending);
   process.stdout.write(`\r  ${fmt(items)} billing codes · ${fmt(seen.size)} matching NPIs\n`);
   return seen.size;
 }
@@ -201,6 +242,27 @@ async function insertBatch(planId: string, npis: string[]): Promise<number> {
 
 // ─── Process one MRF file ─────────────────────────────────────────────────────
 
+async function detectMrfVersion(
+  url: string | null,
+  file: string | null,
+  hint: string
+): Promise<'refs' | 'inline'> {
+  // Peek at first 4KB to check for "provider_references" key before "in_network"
+  let chunk = '';
+  if (file) {
+    const s = createReadStream(file, { end: 4095 });
+    for await (const c of s) chunk += c.toString();
+  } else {
+    const res = await fetch(url!, {
+      headers: { 'User-Agent': 'HealthNavigator-MRF-Import/1.0', Range: 'bytes=0-4095' },
+    });
+    chunk = await res.text();
+  }
+  // If file is gzipped we can't peek reliably; default to inline (v1)
+  if (hint.endsWith('.gz') || hint.endsWith('.gzip')) return 'inline';
+  return chunk.includes('"provider_references"') ? 'refs' : 'inline';
+}
+
 async function processMrf(
   url: string | null,
   file: string | null,
@@ -208,12 +270,22 @@ async function processMrf(
   knownNpis: Set<string>
 ): Promise<number> {
   const hint = url ?? file ?? '';
+  const version = await detectMrfVersion(url, file, hint);
+  console.log(
+    `  Format: ${version === 'refs' ? 'CMS v2.0 (provider_references)' : 'CMS v1 (inline)'}`
+  );
+
   const source = file ? createReadStream(file) : await fetchStream(url!);
   let inserted = 0;
-
-  await streamNpis(source, hint, knownNpis, async (batch) => {
+  const onBatch = async (batch: string[]) => {
     inserted += await insertBatch(planId, batch);
-  });
+  };
+
+  if (version === 'refs') {
+    await streamNpisFromRefs(source, hint, knownNpis, onBatch);
+  } else {
+    await streamNpisFromInNetwork(source, hint, knownNpis, onBatch);
+  }
 
   return inserted;
 }
