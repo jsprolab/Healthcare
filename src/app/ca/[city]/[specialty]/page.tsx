@@ -34,6 +34,7 @@ interface Props {
     medicare?: string;
     telehealth?: string;
     gender?: string;
+    insurance?: string;
   }>;
 }
 
@@ -66,6 +67,7 @@ export default async function CitySpecialtyPage({ params, searchParams }: Props)
     medicare: medicareParam,
     telehealth: telehealthParam,
     gender: genderParam,
+    insurance: insuranceParam,
   } = await searchParams;
 
   const showAll = pageSizeParam === 'all';
@@ -87,6 +89,9 @@ export default async function CitySpecialtyPage({ params, searchParams }: Props)
   const medicareFilter = medicareParam === '1' ? { acceptsMedicare: true } : {};
   const telehealthFilter = telehealthParam === '1' ? { telehealth: true } : {};
   const genderFilter = genderParam === 'M' || genderParam === 'F' ? { gender: genderParam } : {};
+  const insuranceFilter = insuranceParam
+    ? { acceptedPlans: { some: { plan: { slug: insuranceParam } } } }
+    : {};
 
   const [city, specialty] = await Promise.all([
     getCityBySlug(citySlug),
@@ -101,25 +106,32 @@ export default async function CitySpecialtyPage({ params, searchParams }: Props)
     ...medicareFilter,
     ...telehealthFilter,
     ...genderFilter,
+    ...insuranceFilter,
   };
 
-  const [providers, total] = await prisma.$transaction([
+  const [providers, total, availableInsurers] = await Promise.all([
     prisma.provider.findMany({
       where,
       include: { specialty: true, city: true },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
       skip,
-      ...(showAll ? {} : { take: pageSize }),
+      take: pageSize,
     }),
     prisma.provider.count({ where }),
+    prisma.insurancePlan.findMany({
+      distinct: ['insurer'],
+      select: { insurer: true, slug: true },
+      orderBy: { insurer: 'asc' },
+    }),
   ]);
 
-  const totalPages = showAll ? 1 : Math.ceil(total / pageSize);
+  const totalPages = Math.ceil(total / pageSize);
   const basePath = `/ca/${citySlug}/${specialtySlug}`;
-  const currentPageSizeParam = showAll ? 'all' : String(pageSize);
+  const currentPageSizeParam = String(pageSize);
   const medicareOn = medicareParam === '1';
   const telehealthOn = telehealthParam === '1';
   const genderOn = genderParam === 'M' || genderParam === 'F' ? genderParam : null;
+  const insuranceOn = insuranceParam ?? null;
 
   function filterHref(overrides: Record<string, string | undefined>) {
     const p = new URLSearchParams();
@@ -128,6 +140,7 @@ export default async function CitySpecialtyPage({ params, searchParams }: Props)
     if (medicareOn) p.set('medicare', '1');
     if (telehealthOn) p.set('telehealth', '1');
     if (genderOn) p.set('gender', genderOn);
+    if (insuranceOn) p.set('insurance', insuranceOn);
     Object.entries(overrides).forEach(([k, v]) => (v === undefined ? p.delete(k) : p.set(k, v)));
     if (!p.has('page')) p.set('page', '1');
     return `${basePath}?${p.toString()}`;
@@ -372,6 +385,33 @@ export default async function CitySpecialtyPage({ params, searchParams }: Props)
                   >
                     Telehealth
                   </Link>
+
+                  {/* Insurance filter — only shown after MRF data is imported */}
+                  {availableInsurers.length > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <select
+                        value={insuranceOn ?? ''}
+                        onChange={(e) => {
+                          window.location.href = filterHref({
+                            insurance: e.target.value || undefined,
+                            page: '1',
+                          });
+                        }}
+                        className={`rounded-lg border px-3 py-1 text-xs font-medium transition-colors focus:outline-none ${
+                          insuranceOn
+                            ? 'border-purple-300 bg-purple-600 text-white'
+                            : 'border-gray-200 bg-white text-gray-600'
+                        }`}
+                      >
+                        <option value="">Insurance: Any</option>
+                        {availableInsurers.map((plan) => (
+                          <option key={plan.slug} value={plan.slug}>
+                            {plan.insurer}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
                 <PerPageSelector
                   current={currentPageSizeParam}
@@ -380,6 +420,7 @@ export default async function CitySpecialtyPage({ params, searchParams }: Props)
                     medicare: medicareOn ? '1' : undefined,
                     telehealth: telehealthOn ? '1' : undefined,
                     gender: genderOn ?? undefined,
+                    insurance: insuranceOn ?? undefined,
                   }}
                 />
               </div>

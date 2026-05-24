@@ -77,6 +77,8 @@ model Provider {
   specialtyId String?   @map("specialty_id")
   specialty   Specialty? @relation(fields: [specialtyId], references: [id])
 
+  acceptedPlans ProviderInsurance[]
+
   cityId String? @map("city_id")
   city   City?   @relation(fields: [cityId], references: [id])
 
@@ -91,6 +93,33 @@ model Provider {
   // Name search — composite covers lastName-only queries via leftmost prefix
   @@index([lastName, firstName])
   @@map("providers")
+}
+
+// ─── Insurance ────────────────────────────────────────────────────────────────
+
+model InsurancePlan {
+  id        String   @id @default(cuid())
+  insurer   String           // "Anthem Blue Cross"
+  name      String           // "PPO Plus 2024"
+  slug      String   @unique // "anthem-blue-cross"
+  createdAt DateTime @default(now()) @map("created_at")
+
+  providers ProviderInsurance[]
+
+  @@index([insurer])
+  @@map("insurance_plans")
+}
+
+model ProviderInsurance {
+  providerId String @map("provider_id")
+  planId     String @map("plan_id")
+
+  provider Provider      @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  plan     InsurancePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@id([providerId, planId])
+  @@index([planId])
+  @@map("provider_insurance")
 }
 
 // ─── DataReport ───────────────────────────────────────────────────────────────
