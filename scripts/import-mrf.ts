@@ -51,12 +51,15 @@ const MRF_FILE = arg('--file');
 const INDEX_URL = arg('--index');
 const INSURER = arg('--insurer');
 const PLAN_NAME = arg('--plan') ?? INSURER ?? 'In-Network';
+const STATE_FILTER = arg('--state'); // e.g. "california" or "ca" — filters index by filename/description
 
 if (!INSURER || (!MRF_URL && !MRF_FILE && !INDEX_URL)) {
   console.error('Usage:');
   console.error('  npx tsx scripts/import-mrf.ts --url <url> --insurer <name> [--plan <plan>]');
   console.error('  npx tsx scripts/import-mrf.ts --file <path> --insurer <name>');
-  console.error('  npx tsx scripts/import-mrf.ts --index <url> --insurer <name>');
+  console.error(
+    '  npx tsx scripts/import-mrf.ts --index <url> --insurer <name> [--state california]'
+  );
   process.exit(1);
 }
 
@@ -87,7 +90,7 @@ function maybeGunzip(stream: Readable, hint: string): Readable {
 
 // ─── Index file discovery ─────────────────────────────────────────────────────
 
-async function discoverMrfUrls(indexUrl: string): Promise<string[]> {
+async function discoverMrfUrls(indexUrl: string, stateFilter?: string): Promise<string[]> {
   console.log(`Fetching index: ${indexUrl}`);
   const res = await fetch(indexUrl, {
     headers: { 'User-Agent': 'HealthNavigator-MRF-Import/1.0' },
@@ -95,14 +98,22 @@ async function discoverMrfUrls(indexUrl: string): Promise<string[]> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = (await res.json()) as {
     reporting_structure?: Array<{
-      in_network_files?: Array<{ location: string }>;
+      in_network_files?: Array<{ location: string; description?: string }>;
     }>;
   };
   const urls = (data.reporting_structure ?? [])
     .flatMap((s) => s.in_network_files ?? [])
+    .filter((f) => {
+      if (!stateFilter) return true;
+      const loc = (f.location ?? '').toLowerCase();
+      const desc = (f.description ?? '').toLowerCase();
+      const st = stateFilter.toLowerCase();
+      return loc.includes(st) || desc.includes(st);
+    })
     .map((f) => f.location)
     .filter(Boolean);
-  console.log(`  Found ${urls.length} in-network file(s)`);
+  if (stateFilter) console.log(`  Filtered to "${stateFilter}": ${urls.length} file(s)`);
+  else console.log(`  Found ${urls.length} in-network file(s)`);
   return urls;
 }
 
@@ -224,7 +235,7 @@ async function main() {
   let totalInserted = 0;
 
   if (INDEX_URL) {
-    const urls = await discoverMrfUrls(INDEX_URL);
+    const urls = await discoverMrfUrls(INDEX_URL, STATE_FILTER);
     for (let i = 0; i < urls.length; i++) {
       console.log(`File ${i + 1}/${urls.length}: ${urls[i]}`);
       try {
