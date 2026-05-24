@@ -24,7 +24,7 @@
  * Key path:   in_network[].negotiated_rates[].provider_groups[].npi[]
  */
 
-import { createReadStream } from 'node:fs';
+import { createReadStream, readFileSync } from 'node:fs';
 import { createGunzip } from 'node:zlib';
 import { Readable, type Duplex } from 'node:stream';
 import parserStream from 'stream-json';
@@ -42,17 +42,19 @@ function arg(flag: string): string | undefined {
 const MRF_URL = arg('--url');
 const MRF_FILE = arg('--file');
 const INDEX_URL = arg('--index');
+const URL_FILE = arg('--url-file'); // path to a text file with one MRF URL per line
 const INSURER = arg('--insurer');
 const PLAN_NAME = arg('--plan') ?? INSURER ?? 'In-Network';
 const STATE_FILTER = arg('--state'); // e.g. "california" or "ca" — filters index by filename/description
 
-if (!INSURER || (!MRF_URL && !MRF_FILE && !INDEX_URL)) {
+if (!INSURER || (!MRF_URL && !MRF_FILE && !INDEX_URL && !URL_FILE)) {
   console.error('Usage:');
   console.error('  npx tsx scripts/import-mrf.ts --url <url> --insurer <name> [--plan <plan>]');
   console.error('  npx tsx scripts/import-mrf.ts --file <path> --insurer <name>');
   console.error(
     '  npx tsx scripts/import-mrf.ts --index <url> --insurer <name> [--state california]'
   );
+  console.error('  npx tsx scripts/import-mrf.ts --url-file <path> --insurer <name>');
   process.exit(1);
 }
 
@@ -77,8 +79,13 @@ async function fetchStream(url: string): Promise<Readable> {
   return Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]);
 }
 
+function isGzipped(hint: string): boolean {
+  const path = hint.split('?')[0];
+  return path.endsWith('.gz') || path.endsWith('.gzip');
+}
+
 function maybeGunzip(stream: Readable, hint: string): Readable {
-  return hint.endsWith('.gz') || hint.endsWith('.gzip') ? stream.pipe(createGunzip()) : stream;
+  return isGzipped(hint) ? stream.pipe(createGunzip()) : stream;
 }
 
 // ─── Index file discovery ─────────────────────────────────────────────────────
@@ -247,19 +254,15 @@ async function detectMrfVersion(
   file: string | null,
   hint: string
 ): Promise<'refs' | 'inline'> {
-  // Peek at first 4KB to check for "provider_references" key before "in_network"
+  // Stream first ~16KB (decompressed) to check for "provider_references" before "in_network"
   let chunk = '';
-  if (file) {
-    const s = createReadStream(file, { end: 4095 });
-    for await (const c of s) chunk += c.toString();
-  } else {
-    const res = await fetch(url!, {
-      headers: { 'User-Agent': 'HealthNavigator-MRF-Import/1.0', Range: 'bytes=0-4095' },
-    });
-    chunk = await res.text();
+  const raw = file ? createReadStream(file, { end: 65535 }) : await fetchStream(url!);
+  const src = isGzipped(hint) ? (raw.pipe(createGunzip()) as Readable) : raw;
+  for await (const c of src) {
+    chunk += c.toString();
+    if (chunk.length >= 16384) break;
   }
-  // If file is gzipped we can't peek reliably; default to inline (v1)
-  if (hint.endsWith('.gz') || hint.endsWith('.gzip')) return 'inline';
+  src.destroy?.();
   return chunk.includes('"provider_references"') ? 'refs' : 'inline';
 }
 
@@ -306,12 +309,20 @@ async function main() {
 
   let totalInserted = 0;
 
-  if (INDEX_URL) {
-    const urls = await discoverMrfUrls(INDEX_URL, STATE_FILTER);
-    for (let i = 0; i < urls.length; i++) {
-      console.log(`File ${i + 1}/${urls.length}: ${urls[i]}`);
+  const urlList: string[] = URL_FILE
+    ? readFileSync(URL_FILE, 'utf8')
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : INDEX_URL
+      ? await discoverMrfUrls(INDEX_URL, STATE_FILTER)
+      : [];
+
+  if (urlList.length > 0) {
+    for (let i = 0; i < urlList.length; i++) {
+      console.log(`File ${i + 1}/${urlList.length}: ${urlList[i].slice(0, 80)}…`);
       try {
-        const n = await processMrf(urls[i], null, planId, knownNpis);
+        const n = await processMrf(urlList[i], null, planId, knownNpis);
         totalInserted += n;
         console.log(`  → ${fmt(n)} inserted`);
       } catch (err) {
