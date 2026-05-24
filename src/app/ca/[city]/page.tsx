@@ -158,10 +158,10 @@ export default async function CityPage({ params }: Props) {
       ),
     prisma.$queryRaw<StatsRow[]>`
       SELECT
-        COUNT(*) FILTER (WHERE "acceptsMedicare" = true)  AS medicare,
-        COUNT(*) FILTER (WHERE telehealth = true)          AS telehealth,
-        COUNT(*) FILTER (WHERE gender = 'M')               AS male,
-        COUNT(*) FILTER (WHERE gender = 'F')               AS female
+        COUNT(*) FILTER (WHERE accepts_medicare = true) AS medicare,
+        COUNT(*) FILTER (WHERE telehealth = true)        AS telehealth,
+        COUNT(*) FILTER (WHERE gender = 'M')             AS male,
+        COUNT(*) FILTER (WHERE gender = 'F')             AS female
       FROM providers
       WHERE city_id = ${city.id}
     `,
