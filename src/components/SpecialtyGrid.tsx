@@ -177,6 +177,8 @@ function SpecialtyCard({
 
 export default function SpecialtyGrid({ specialties, cities }: Props) {
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
+  const [cityCounts, setCityCounts] = useState<Record<string, number>>({});
+  const [countsLoading, setCountsLoading] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const activeIndex = specialties.findIndex((s) => s.slug === activeSlug);
@@ -185,6 +187,20 @@ export default function SpecialtyGrid({ specialties, cities }: Props) {
   function handleToggle(slug: string) {
     setActiveSlug((prev) => (prev === slug ? null : slug));
   }
+
+  // Fetch per-specialty city counts whenever the selected specialty changes
+  useEffect(() => {
+    if (!activeSlug) return;
+    const citySlugs = cities.map((c) => c.slug).join(',');
+    setCountsLoading(true);
+    fetch(`/api/specialty-cities?specialty=${activeSlug}&cities=${citySlugs}`)
+      .then((r) => r.json())
+      .then((data: Record<string, number>) => {
+        setCityCounts(data);
+        setCountsLoading(false);
+      })
+      .catch(() => setCountsLoading(false));
+  }, [activeSlug, cities]);
 
   useEffect(() => {
     if (activeSlug && panelRef.current) {
@@ -245,22 +261,29 @@ export default function SpecialtyGrid({ specialties, cities }: Props) {
           </p>
 
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-            {cities.map((city) => (
-              <Link
-                key={city.slug}
-                href={`/ca/${city.slug}/${activeSpecialty.slug}`}
-                className="group flex flex-col rounded-xl border border-white/80 bg-white px-4 py-3 shadow-sm transition-all hover:border-brand-300 hover:shadow-md"
-              >
-                <span className="text-sm font-semibold text-gray-800 transition-colors group-hover:text-brand-700">
-                  {city.name}
-                </span>
-                <span className="mt-0.5 text-xs text-gray-400">
-                  {city.providerCount > 0
-                    ? `${city.providerCount.toLocaleString()} providers`
-                    : 'CA'}
-                </span>
-              </Link>
-            ))}
+            {cities.map((city) => {
+              const count = cityCounts[city.slug];
+              return (
+                <Link
+                  key={city.slug}
+                  href={`/ca/${city.slug}/${activeSpecialty.slug}`}
+                  className="group flex flex-col rounded-xl border border-white/80 bg-white px-4 py-3 shadow-sm transition-all hover:border-brand-300 hover:shadow-md"
+                >
+                  <span className="text-sm font-semibold text-gray-800 transition-colors group-hover:text-brand-700">
+                    {city.name}
+                  </span>
+                  <span className="mt-0.5 text-xs text-gray-400">
+                    {countsLoading ? (
+                      <span className="inline-block h-3 w-12 animate-pulse rounded bg-gray-200" />
+                    ) : count != null ? (
+                      `${count.toLocaleString()} providers`
+                    ) : (
+                      'No providers'
+                    )}
+                  </span>
+                </Link>
+              );
+            })}
           </div>
         </div>
       )}
