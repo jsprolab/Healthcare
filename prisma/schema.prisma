@@ -1,0 +1,124 @@
+// https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Specialty ───────────────────────────────────────────────────────────────
+
+model Specialty {
+  id          String     @id @default(cuid())
+  name        String
+  slug        String     @unique
+  description String?    @db.Text
+  providers   Provider[]
+
+  // Supports autocomplete / list-all queries sorted by name
+  @@index([name])
+  @@map("specialties")
+}
+
+// ─── City ─────────────────────────────────────────────────────────────────────
+
+model City {
+  id            String     @id @default(cuid())
+  name          String
+  state         String     @db.VarChar(2)
+  slug          String     @unique
+  // Denormalized count — updated via application logic when providers are added/removed
+  providerCount Int        @default(0) @map("provider_count")
+  providers     Provider[]
+
+  // City search: filter by state, search by name+state
+  @@index([state])
+  @@index([name, state])
+  @@map("cities")
+}
+
+// ─── Provider ─────────────────────────────────────────────────────────────────
+
+model Provider {
+  id               String   @id @default(cuid())
+  // National Provider Identifier — 10-digit, federally issued, globally unique
+  npi              String   @unique @db.VarChar(10)
+  firstName        String?  @map("first_name")
+  lastName         String?  @map("last_name")
+  organizationName String?  @map("organization_name")
+  // NUCC Health Care Provider Taxonomy code
+  taxonomyCode     String?  @map("taxonomy_code") @db.VarChar(10)
+  address1         String?  @map("address1")
+  address2         String?  @map("address2")
+  state            String?  @db.VarChar(2)
+  zipCode          String?  @map("zip_code") @db.VarChar(10)
+  phone            String?  @db.VarChar(20)
+  // Decimal(10,7): supports full ±180° range with ~1cm precision at equator
+  latitude         Decimal? @db.Decimal(10, 7)
+  longitude        Decimal? @db.Decimal(10, 7)
+  // CMS Medicare data — populated by import-cms-medicare script
+  acceptsMedicare   Boolean? @map("accepts_medicare")
+  telehealth        Boolean?
+  gender            String?  @db.VarChar(1)
+  credentials       String?  @db.VarChar(20)
+  languages         String[]
+  // CMS Physician Compare — medical education
+  medSchool         String?  @map("med_school")
+  gradYear          Int?     @map("grad_year")
+  // Claiming — set by admin after verifying a ProviderClaim
+  acceptingPatients Boolean? @map("accepting_patients")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  specialtyId String?   @map("specialty_id")
+  specialty   Specialty? @relation(fields: [specialtyId], references: [id])
+
+  cityId String? @map("city_id")
+  city   City?   @relation(fields: [cityId], references: [id])
+
+  // Specialty search — join from providers to specialty
+  @@index([specialtyId])
+  // City search — join from providers to city
+  @@index([cityId])
+  // State-level filtering (California focus)
+  @@index([state])
+  // Bounding-box geo queries (lat/lng range scan)
+  @@index([latitude, longitude])
+  // Name search — composite covers lastName-only queries via leftmost prefix
+  @@index([lastName, firstName])
+  @@map("providers")
+}
+
+// ─── DataReport ───────────────────────────────────────────────────────────────
+
+model DataReport {
+  id        String   @id @default(cuid())
+  npi       String   @db.VarChar(10)
+  field     String   @db.VarChar(50)
+  message   String   @db.Text
+  email     String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([npi])
+  @@map("data_reports")
+}
+
+// ─── ProviderClaim ────────────────────────────────────────────────────────────
+
+model ProviderClaim {
+  id                String   @id @default(cuid())
+  npi               String   @db.VarChar(10)
+  claimantName      String   @map("claimant_name")
+  claimantEmail     String   @map("claimant_email")
+  acceptingPatients Boolean  @default(false) @map("accepting_patients")
+  message           String?  @db.Text
+  status            String   @default("pending") @db.VarChar(20)
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([npi])
+  @@map("provider_claims")
+}
