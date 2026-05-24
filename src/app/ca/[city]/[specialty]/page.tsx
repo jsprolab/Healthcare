@@ -13,7 +13,6 @@ import {
   citySpecialtyTitle,
   citySpecialtyDescription,
 } from '@/lib/seo';
-import { getCaSpecialtyParams } from '@/lib/static-params';
 import SiteHeader from '@/components/SiteHeader';
 import Breadcrumb from '@/components/Breadcrumb';
 import PerPageSelector from '@/components/PerPageSelector';
@@ -36,10 +35,6 @@ interface Props {
 }
 
 export const dynamicParams = true;
-
-export async function generateStaticParams() {
-  return getCaSpecialtyParams();
-}
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { city: citySlug, specialty: specialtySlug } = await params;

@@ -121,11 +121,6 @@ const SPECIALTY_COLORS = [
   },
 ];
 
-export async function generateStaticParams() {
-  const cities = await prisma.city.findMany({ select: { slug: true }, where: { state: 'CA' } });
-  return cities.map((c) => ({ city: c.slug }));
-}
-
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { city: citySlug } = await params;
   const city = await getCityBySlug(citySlug);
