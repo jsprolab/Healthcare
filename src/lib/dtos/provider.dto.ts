@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client';
 import { formatPhone } from '@/utils';
 
 export type ProviderWithRelations = Prisma.ProviderGetPayload<{
-  include: { specialty: true; city: true };
+  include: { specialty: true; city: true; acceptedPlans: { include: { plan: true } } };
 }>;
 
 export interface ProviderResponseDto {

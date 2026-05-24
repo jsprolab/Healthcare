@@ -30,7 +30,14 @@ export const revalidate = 3600;
 export const dynamicParams = true;
 
 async function getProvider(npi: string): Promise<ProviderWithRelations | null> {
-  return prisma.provider.findUnique({ where: { npi }, include: { specialty: true, city: true } });
+  return prisma.provider.findUnique({
+    where: { npi },
+    include: {
+      specialty: true,
+      city: true,
+      acceptedPlans: { include: { plan: true }, orderBy: { plan: { insurer: 'asc' } } },
+    },
+  });
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -545,6 +552,50 @@ export default async function ProviderPage({ params }: Props) {
                   <ClaimButton npi={npi} providerName={displayName} />
                   <ReportButton npi={npi} />
                 </div>
+              </section>
+
+              {/* Accepted Insurance */}
+              <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+                <div className="border-b border-gray-100 px-6 py-4">
+                  <h2 className="font-semibold text-gray-900">Accepted Insurance</h2>
+                </div>
+                {provider.acceptedPlans && provider.acceptedPlans.length > 0 ? (
+                  <div className="px-6 py-4">
+                    <div className="flex flex-wrap gap-2">
+                      {provider.acceptedPlans.map(({ plan }) => (
+                        <span
+                          key={plan.id}
+                          className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200"
+                        >
+                          <svg
+                            viewBox="0 0 12 12"
+                            fill="currentColor"
+                            className="h-2.5 w-2.5 text-emerald-500"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M10.53 3.47a.75.75 0 0 0-1.06 0L5 7.94 2.53 5.47a.75.75 0 0 0-1.06 1.06l3 3a.75.75 0 0 0 1.06 0l5-5a.75.75 0 0 0 0-1.06Z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                          {plan.insurer}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="mt-3 text-xs text-gray-400">
+                      Call the provider to confirm current coverage before booking.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="px-6 py-4">
+                    <p className="text-sm text-gray-400">
+                      No insurance network data on file for this provider.
+                    </p>
+                    <p className="mt-1 text-xs text-gray-400">
+                      Call the provider&apos;s office to verify coverage.
+                    </p>
+                  </div>
+                )}
               </section>
 
               {/* Provider info */}

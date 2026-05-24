@@ -12,7 +12,11 @@ export interface IProviderRepository {
   findById(id: string): Promise<ProviderWithRelations | null>;
 }
 
-const providerInclude = { specialty: true, city: true } as const;
+const providerInclude = {
+  specialty: true,
+  city: true,
+  acceptedPlans: { include: { plan: true } },
+} as const;
 
 function buildWhere(params: ProviderSearchParams): Prisma.ProviderWhereInput {
   return {
