@@ -1,3 +1,7 @@
+'use client';
+
+import { useState } from 'react';
+
 const PALETTES = [
   'bg-brand-100 text-brand-700',
   'bg-violet-100 text-violet-700',
@@ -22,6 +26,9 @@ export default function ProviderAvatar({
   isOrg = false,
   className = 'h-12 w-12',
 }: Props) {
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const [imgError, setImgError] = useState(false);
+
   const palette = PALETTES[parseInt(npi.slice(-2), 10) % PALETTES.length];
 
   const initials = isOrg
@@ -42,14 +49,31 @@ export default function ProviderAvatar({
         .join('')
         .toUpperCase() || '?';
 
+  const showImg = imgLoaded && !imgError;
+
   return (
-    <div
-      className={`flex flex-shrink-0 items-center justify-center rounded-full font-semibold ${palette} ${className}`}
-      aria-hidden="true"
-    >
-      <span className="leading-none" style={{ fontSize: '35%' }}>
-        {initials}
-      </span>
+    <div className={`relative flex-shrink-0 ${className}`} aria-hidden="true">
+      {/* Initials — visible until image loads */}
+      <div
+        className={`absolute inset-0 flex items-center justify-center rounded-full font-semibold transition-opacity duration-200 ${palette} ${showImg ? 'opacity-0' : 'opacity-100'}`}
+      >
+        <span className="leading-none" style={{ fontSize: '35%' }}>
+          {initials}
+        </span>
+      </div>
+
+      {/* DiceBear image — loads lazily, fades in when ready */}
+      {!imgError && (
+        <img
+          src={`https://api.dicebear.com/9.x/micah/svg?seed=${npi}`}
+          alt=""
+          loading="lazy"
+          fetchPriority="low"
+          onLoad={() => setImgLoaded(true)}
+          onError={() => setImgError(true)}
+          className={`absolute inset-0 h-full w-full rounded-full object-cover transition-opacity duration-200 ${showImg ? 'opacity-100' : 'opacity-0'}`}
+        />
+      )}
     </div>
   );
 }
