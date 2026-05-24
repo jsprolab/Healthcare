@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 
 export async function getCaSpecialtyParams(): Promise<{ city: string; specialty: string }[]> {
+  // Cap at top 500 combos to keep build time sane; dynamicParams=true handles the rest via ISR
   const groups = await prisma.provider.groupBy({
     by: ['cityId', 'specialtyId'],
     where: {
@@ -8,6 +9,9 @@ export async function getCaSpecialtyParams(): Promise<{ city: string; specialty:
       specialtyId: { not: null },
       city: { state: 'CA' },
     },
+    _count: { _all: true },
+    orderBy: { _count: { cityId: 'desc' } },
+    take: 500,
   });
 
   if (groups.length === 0) return [];
