@@ -70,10 +70,13 @@ export default async function HomePage() {
             <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-brand-200">
               Search{' '}
               <span className="font-semibold text-white">{providerCount.toLocaleString()}</span>{' '}
-              verified NPI-registered providers across{' '}
-              <span className="font-semibold text-white">{cityCount.toLocaleString()}</span>{' '}
-              California cities and{' '}
-              <span className="font-semibold text-white">{specialties.length}</span> specialties.
+              NPI-registered California providers — individuals &amp; organizations — across{' '}
+              <span className="font-semibold text-white">{cityCount.toLocaleString()}</span> cities
+              and <span className="font-semibold text-white">{specialties.length}</span>{' '}
+              specialties.
+            </p>
+            <p className="mt-2 text-xs text-brand-300">
+              Data sourced from CMS NPPES · Call provider to confirm availability
             </p>
             {/* Search + Near Me */}
             <div className="mx-auto mt-8 max-w-2xl">
@@ -196,12 +199,15 @@ export default async function HomePage() {
           </div>
         </section>
 
-        {/* Footer */}
-        <footer className="mt-auto border-t border-gray-100 bg-gray-50">
-          <div className="mx-auto max-w-6xl px-6 py-10">
-            <div className="flex flex-col items-center gap-2 text-center">
+        {/* Site footer */}
+        <footer className="mt-auto border-t border-gray-100 bg-white">
+          <div className="mx-auto max-w-6xl px-6 py-8">
+            <div className="flex flex-col items-center gap-3 text-center">
               <div className="flex items-center gap-2">
-                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-brand-600">
+                <div
+                  className="flex h-6 w-6 items-center justify-center rounded-md bg-brand-600"
+                  aria-hidden="true"
+                >
                   <svg viewBox="0 0 24 24" fill="currentColor" className="h-3 w-3 text-white">
                     <path
                       fillRule="evenodd"
@@ -213,12 +219,15 @@ export default async function HomePage() {
                 <span className="text-sm font-semibold text-gray-700">{SITE_NAME}</span>
               </div>
               <p className="text-sm text-gray-500">
-                Find verified healthcare providers across California.
+                California&apos;s NPI provider directory — individuals &amp; organizations.
               </p>
-              <p className="mt-2 text-xs text-gray-400">
-                Data sourced from CMS NPPES National Provider Identifier registry. ©{' '}
-                {new Date().getFullYear()} {SITE_NAME}.
-              </p>
+              <div className="flex flex-wrap justify-center gap-4 text-xs text-gray-400">
+                <span>Data: CMS NPPES Registry</span>
+                <span aria-hidden="true">·</span>
+                <span>957,438 individual providers</span>
+                <span aria-hidden="true">·</span>
+                <span>193,003 organizations</span>
+              </div>
             </div>
           </div>
         </footer>

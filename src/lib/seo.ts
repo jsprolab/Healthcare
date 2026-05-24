@@ -2,12 +2,15 @@ import { formatPhone } from '@/utils';
 import type { ProviderWithRelations } from '@/lib/dtos/provider.dto';
 import type { City, Specialty } from '@prisma/client';
 
-export const SITE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://healthnavigator.ai').replace(
-  /\/$/,
-  ''
-);
+export const SITE_URL = (
+  process.env.NEXT_PUBLIC_BASE_URL ?? 'https://healthnavigator-usa.vercel.app'
+).replace(/\/$/, '');
 
 export const SITE_NAME = 'HealthNavigator';
+
+export const DATA_SOURCE = 'CMS NPPES National Provider Identifier Registry';
+export const DATA_DISCLAIMER =
+  'This directory is for informational purposes only and is not a substitute for professional medical advice. Always call the provider to confirm availability, insurance, and appointment details before visiting.';
 
 export function absoluteUrl(path: string): string {
   return `${SITE_URL}${path.startsWith('/') ? path : `/${path}`}`;
@@ -16,11 +19,11 @@ export function absoluteUrl(path: string): string {
 // ─── Title builders ───────────────────────────────────────────────────────────
 
 export function cityTitle(city: City): string {
-  return `Healthcare Providers in ${city.name}, CA`;
+  return `Healthcare Providers in ${city.name}, CA | ${SITE_NAME}`;
 }
 
 export function citySpecialtyTitle(city: City, specialty: Specialty): string {
-  return `${specialty.name} Doctors in ${city.name}, CA`;
+  return `${specialty.name} in ${city.name}, CA – Find Doctors & Specialists`;
 }
 
 export function providerTitle(provider: ProviderWithRelations): string {
@@ -30,20 +33,20 @@ export function providerTitle(provider: ProviderWithRelations): string {
     : [provider.firstName, provider.lastName].filter(Boolean).join(' ');
   const specialty = provider.specialty?.name;
   const city = provider.city?.name;
-  if (specialty && city) return `${name} – ${specialty} in ${city}, CA`;
-  if (specialty) return `${name} – ${specialty}`;
-  return name || provider.npi;
+  if (specialty && city) return `${name} – ${specialty} | ${city}, CA`;
+  if (specialty) return `${name} – ${specialty} | California`;
+  return `${name} | California Healthcare Provider`;
 }
 
 // ─── Description builders ─────────────────────────────────────────────────────
 
 export function cityDescription(city: City): string {
   const count = city.providerCount > 0 ? `${city.providerCount.toLocaleString()} ` : '';
-  return `Find ${count}verified healthcare providers in ${city.name}, California. Browse by specialty and view contact information.`;
+  return `Browse ${count}NPI-verified healthcare providers in ${city.name}, California. Filter by specialty, Medicare, and telehealth. Data from CMS NPPES.`;
 }
 
 export function citySpecialtyDescription(city: City, specialty: Specialty): string {
-  return `Find verified ${specialty.name} doctors and specialists in ${city.name}, CA. View profiles, addresses, and contact information.`;
+  return `Find verified ${specialty.name} doctors and specialists in ${city.name}, CA. View NPI numbers, addresses, phone numbers, and insurance info. Sourced from CMS NPPES.`;
 }
 
 export function providerDescription(provider: ProviderWithRelations): string {
@@ -53,16 +56,16 @@ export function providerDescription(provider: ProviderWithRelations): string {
     : [provider.firstName, provider.lastName].filter(Boolean).join(' ');
   const specialty = provider.specialty?.name ?? 'healthcare';
   const city = provider.city?.name;
+  const phone = provider.phone ? ` Call ${formatPhone(provider.phone)}.` : '';
   if (city) {
-    return `${name} is a ${specialty} provider in ${city}, CA. View NPI, address, phone, and contact details.`;
+    return `${name} is an NPI-registered ${specialty} provider in ${city}, CA.${phone} View address, contact info, and Medicare status. Data from CMS NPPES.`;
   }
-  return `${name} is a ${specialty} provider in California. View NPI and contact details.`;
+  return `${name} is an NPI-registered ${specialty} provider in California.${phone} View NPI, contact details, and Medicare status.`;
 }
 
 // ─── JSON-LD builders ─────────────────────────────────────────────────────────
 
 type JsonLdObject = Record<string, unknown>;
-
 type BreadcrumbItem = { name: string; url: string };
 
 export function buildWebSiteSchema(): JsonLdObject {
@@ -71,14 +74,16 @@ export function buildWebSiteSchema(): JsonLdObject {
     '@type': 'WebSite',
     name: SITE_NAME,
     url: SITE_URL,
-    description: 'Find and compare verified healthcare providers across California.',
+    description:
+      'Find and compare NPI-verified healthcare providers across California. Sourced from CMS NPPES.',
+    inLanguage: 'en-US',
     potentialAction: {
       '@type': 'SearchAction',
       target: {
         '@type': 'EntryPoint',
-        urlTemplate: `${SITE_URL}/ca/{city}`,
+        urlTemplate: `${SITE_URL}/search?q={search_term_string}`,
       },
-      'query-input': 'required name=city',
+      'query-input': 'required name=search_term_string',
     },
   };
 }
@@ -108,6 +113,8 @@ export function buildWebPageSchema(opts: {
     name: opts.name,
     description: opts.description,
     url: opts.url,
+    inLanguage: 'en-US',
+    isPartOf: { '@type': 'WebSite', name: SITE_NAME, url: SITE_URL },
     breadcrumb: buildBreadcrumbSchema(opts.breadcrumbs),
   };
 }
@@ -120,11 +127,11 @@ export function buildProviderSchema(provider: ProviderWithRelations): JsonLdObje
 
   const streetAddress = [provider.address1, provider.address2].filter(Boolean).join(', ');
 
-  return {
+  const base: JsonLdObject = {
     '@context': 'https://schema.org',
     '@type': isOrg ? 'MedicalOrganization' : 'Physician',
     name,
-    identifier: provider.npi,
+    identifier: [{ '@type': 'PropertyValue', name: 'NPI', value: provider.npi }],
     url: absoluteUrl(`/provider/${provider.npi}`),
     ...(provider.specialty?.name && { medicalSpecialty: provider.specialty.name }),
     address: {
@@ -132,8 +139,8 @@ export function buildProviderSchema(provider: ProviderWithRelations): JsonLdObje
       ...(streetAddress && { streetAddress }),
       ...(provider.city?.name && { addressLocality: provider.city.name }),
       addressRegion: provider.state ?? 'CA',
-      ...(provider.zipCode && { postalCode: provider.zipCode }),
       addressCountry: 'US',
+      ...(provider.zipCode && { postalCode: provider.zipCode }),
     },
     ...(provider.phone && { telephone: formatPhone(provider.phone) }),
     ...(provider.latitude != null &&
@@ -144,5 +151,18 @@ export function buildProviderSchema(provider: ProviderWithRelations): JsonLdObje
           longitude: provider.longitude.toNumber(),
         },
       }),
+    ...(provider.acceptsMedicare && {
+      availableService: {
+        '@type': 'MedicalTherapy',
+        name: 'Medicare',
+      },
+    }),
   };
+
+  if (!isOrg) {
+    base.gender = provider.gender === 'M' ? 'Male' : provider.gender === 'F' ? 'Female' : undefined;
+    if (provider.credentials) base.honorificSuffix = provider.credentials;
+  }
+
+  return base;
 }
