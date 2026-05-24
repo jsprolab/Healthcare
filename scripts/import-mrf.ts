@@ -234,17 +234,29 @@ async function upsertPlan(insurer: string, planName: string) {
   });
 }
 
-async function insertBatch(planId: string, npis: string[]): Promise<number> {
-  const providers = await prisma.provider.findMany({
-    where: { npi: { in: npis } },
-    select: { id: true },
-  });
-  if (providers.length === 0) return 0;
-  await prisma.providerInsurance.createMany({
-    data: providers.map((p) => ({ providerId: p.id, planId })),
-    skipDuplicates: true,
-  });
-  return providers.length;
+async function insertBatch(planId: string, npis: string[], attempt = 0): Promise<number> {
+  try {
+    const providers = await prisma.provider.findMany({
+      where: { npi: { in: npis } },
+      select: { id: true },
+    });
+    if (providers.length === 0) return 0;
+    await prisma.providerInsurance.createMany({
+      data: providers.map((p) => ({ providerId: p.id, planId })),
+      skipDuplicates: true,
+    });
+    return providers.length;
+  } catch (err) {
+    // P1017 = server closed connection; reconnect and retry up to 3 times
+    const code = (err as { code?: string }).code;
+    if ((code === 'P1017' || code === 'P1001') && attempt < 3) {
+      await prisma.$disconnect();
+      await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
+      await prisma.$connect();
+      return insertBatch(planId, npis, attempt + 1);
+    }
+    throw err;
+  }
 }
 
 // ─── Process one MRF file ─────────────────────────────────────────────────────
