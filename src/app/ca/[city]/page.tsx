@@ -141,7 +141,10 @@ export default async function CityPage({ params }: Props) {
   const city = await getCityBySlug(citySlug);
   if (!city) notFound();
 
-  const [specialties, medicareCount, telehealthCount, maleCount, femaleCount] = await Promise.all([
+  // Run the expensive specialty aggregation and stats in parallel, but stats use
+  // a single raw query instead of 4 separate count() calls to avoid pool contention.
+  type StatsRow = { medicare: bigint; telehealth: bigint; male: bigint; female: bigint };
+  const [specialties, [statsRow]] = await Promise.all([
     prisma.specialty
       .findMany({
         orderBy: { name: 'asc' },
@@ -153,12 +156,22 @@ export default async function CityPage({ params }: Props) {
           .filter((s) => s.providerCount > 0)
           .sort((a, b) => b.providerCount - a.providerCount)
       ),
-    prisma.provider.count({ where: { cityId: city.id, acceptsMedicare: true } }),
-    prisma.provider.count({ where: { cityId: city.id, telehealth: true } }),
-    prisma.provider.count({ where: { cityId: city.id, gender: 'M' } }),
-    prisma.provider.count({ where: { cityId: city.id, gender: 'F' } }),
+    prisma.$queryRaw<StatsRow[]>`
+      SELECT
+        COUNT(*) FILTER (WHERE "acceptsMedicare" = true)  AS medicare,
+        COUNT(*) FILTER (WHERE telehealth = true)          AS telehealth,
+        COUNT(*) FILTER (WHERE gender = 'M')               AS male,
+        COUNT(*) FILTER (WHERE gender = 'F')               AS female
+      FROM providers
+      WHERE city_id = ${city.id}
+    `,
   ]);
+
   const total = city.providerCount;
+  const medicareCount = Number(statsRow?.medicare ?? 0);
+  const telehealthCount = Number(statsRow?.telehealth ?? 0);
+  const maleCount = Number(statsRow?.male ?? 0);
+  const femaleCount = Number(statsRow?.female ?? 0);
   const pctMedicare = total > 0 ? Math.round((medicareCount / total) * 100) : null;
   const pctTelehealth = total > 0 ? Math.round((telehealthCount / total) * 100) : null;
   const pctMale =
