@@ -14,6 +14,7 @@ import { fetchNpiRegistry, formatPostalCode, sexLabel } from '@/lib/npi-registry
 import type { ProviderWithRelations } from '@/lib/dtos/provider.dto';
 import SiteHeader from '@/components/SiteHeader';
 import Breadcrumb from '@/components/Breadcrumb';
+import ProviderAvatar from '@/components/ProviderAvatar';
 import type { BreadcrumbItem } from '@/components/Breadcrumb';
 import ShareButton from '@/components/ShareButton';
 import BookmarkButton from '@/components/BookmarkButton';
@@ -180,10 +181,11 @@ export default async function ProviderPage({ params }: Props) {
           <div className="relative mx-auto max-w-5xl px-6">
             <Breadcrumb items={breadcrumbs} light />
             <div className="mt-6 flex flex-col gap-6 sm:flex-row sm:items-end">
-              <img
-                src={`https://api.dicebear.com/9.x/micah/svg?seed=${npi}`}
-                alt={displayName}
-                className="h-28 w-28 flex-shrink-0 rounded-2xl bg-white/10 ring-2 ring-white/25"
+              <ProviderAvatar
+                npi={npi}
+                name={displayName}
+                isOrg={isOrg}
+                className="h-28 w-28 flex-shrink-0 rounded-2xl text-3xl ring-2 ring-white/25"
               />
               <div className="flex-1">
                 <div className="flex flex-wrap items-center gap-2">
@@ -668,10 +670,10 @@ export default async function ProviderPage({ params }: Props) {
                           href={`/provider/${rp.npi}`}
                           className="group flex items-center gap-3 px-6 py-3 transition-colors hover:bg-brand-50"
                         >
-                          <img
-                            src={`https://api.dicebear.com/9.x/micah/svg?seed=${rp.npi}`}
-                            alt={rpName}
-                            className="h-9 w-9 flex-shrink-0 rounded-full bg-brand-50"
+                          <ProviderAvatar
+                            npi={rp.npi}
+                            name={rpName}
+                            className="h-9 w-9 flex-shrink-0 rounded-full"
                           />
                           <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-800 group-hover:text-brand-700">
                             {rpName}

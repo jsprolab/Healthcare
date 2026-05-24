@@ -18,9 +18,12 @@ import Breadcrumb from '@/components/Breadcrumb';
 import PerPageSelector from '@/components/PerPageSelector';
 import CompareCheckbox from '@/components/CompareCheckbox';
 import CompareBar from '@/components/CompareBar';
+import ProviderAvatar from '@/components/ProviderAvatar';
 
 const VALID_PAGE_SIZES = [25, 50, 100] as const;
 const DEFAULT_PAGE_SIZE = 25;
+
+export const revalidate = 3600;
 
 interface Props {
   params: Promise<{ city: string; specialty: string }>;
@@ -413,11 +416,7 @@ export default async function CitySpecialtyPage({ params, searchParams }: Props)
                       href={`/provider/${provider.npi}`}
                       className="group flex items-center gap-4 rounded-xl border border-gray-100 bg-white p-4 shadow-sm transition-all hover:border-brand-200 hover:shadow-md"
                     >
-                      <img
-                        src={`https://api.dicebear.com/9.x/micah/svg?seed=${provider.npi}`}
-                        alt={displayName}
-                        className="h-12 w-12 flex-shrink-0 rounded-full bg-brand-50"
-                      />
+                      <ProviderAvatar npi={provider.npi} name={displayName} isOrg={isOrg} />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-semibold text-gray-900 transition-colors group-hover:text-brand-700">

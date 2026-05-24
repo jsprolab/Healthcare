@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { prisma } from '@/lib/prisma';
 import { formatPhone } from '@/utils';
 import SiteHeader from '@/components/SiteHeader';
+import ProviderAvatar from '@/components/ProviderAvatar';
 
 const PAGE_SIZE = 20;
 const ZIP_RE = /^\d{5}$/;
@@ -160,11 +161,7 @@ export default async function SearchPage({ searchParams }: Props) {
                       href={`/provider/${p.npi}`}
                       className="group flex items-center gap-4 rounded-xl border border-gray-100 bg-white p-4 shadow-sm transition-all hover:border-brand-200 hover:shadow-md"
                     >
-                      <img
-                        src={`https://api.dicebear.com/9.x/micah/svg?seed=${p.npi}`}
-                        alt={name}
-                        className="h-12 w-12 flex-shrink-0 rounded-full bg-brand-50"
-                      />
+                      <ProviderAvatar npi={p.npi} name={name} isOrg={!!p.organizationName} />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-semibold text-gray-900 group-hover:text-brand-700">
